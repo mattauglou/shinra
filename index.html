@@ -34,6 +34,8 @@
   .detail{font-size:14px;color:var(--sourd);min-height:1.4em;white-space:pre-wrap;word-break:break-word}
   .detail b{color:var(--texte)}
   .rapport{font-family:ui-monospace,Menlo,monospace;font-size:12px;background:#0a1019;border:1px solid var(--bord);border-radius:10px;padding:10px;white-space:pre-wrap;color:var(--sourd)}
+  .champ{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--sourd)}
+  .champ select{font:inherit;font-size:15px;color:var(--texte);background:#0a1019;border:1px solid var(--bord);border-radius:10px;padding:10px 12px;width:100%}
   .rangee{display:flex;gap:10px}
   .rangee button{flex:1}
   .pulse{width:12px;height:12px;border-radius:50%;background:var(--ko);display:inline-block;margin-right:8px;vertical-align:-1px}
@@ -66,8 +68,17 @@
 
   <section id="s-voix">
     <div class="titre"><h2>3 · Voix</h2><span class="etat" id="e-voix">à tester</span></div>
+    <label class="champ">Voix <select id="sel-voix"><option value="">(chargement des voix…)</option></select></label>
+    <label class="champ">Prononciation du nom <select id="sel-nom">
+      <option value="Shinra">Shinra (écrit tel quel)</option>
+      <option value="Chinra" selected>Chinra</option>
+      <option value="Chine-ra">Chine-ra</option>
+      <option value="Chinne ra">Chinne ra</option>
+      <option value="Shin-ra">Shin-ra</option>
+      <option value="Chinnra">Chinnra</option>
+    </select></label>
     <button id="b-voix">Faire parler Shinra</button>
-    <div class="detail" id="d-voix"></div>
+    <div class="detail" id="d-voix">Essaie plusieurs voix et plusieurs prononciations, puis laisse sélectionnées celles que tu préfères avant de copier le rapport.</div>
   </section>
 
   <section id="s-claude">
@@ -168,20 +179,49 @@
   };
 
   // 3. voix
+  var selVoix = document.getElementById('sel-voix'), selNom = document.getElementById('sel-nom');
+  var FEMININES = /(Audrey|Aurélie|Aurelie|Amélie|Amelie|Marie|Céline|Celine|Chantal|Léa|Lea|Julie|Virginie|Female|Femme)/i;
+  var MASCULINES = /(Thomas|Daniel|Nicolas|Antoine|Male|Homme)/i;
+  function voixFr(){
+    if (!window.speechSynthesis) return [];
+    return speechSynthesis.getVoices().filter(function(v){return /^fr/i.test(v.lang);})
+      .sort(function(a,b){ // féminines fr-FR d'abord, masculines en dernier
+        function score(v){ return (FEMININES.test(v.name)?0:MASCULINES.test(v.name)?2:1) + (/fr-FR/i.test(v.lang)?0:0.5); }
+        return score(a)-score(b);
+      });
+  }
+  function remplirVoix(){
+    var voix = voixFr(); if (!voix.length) return;
+    var actuelle = selVoix.value;
+    selVoix.innerHTML = '';
+    voix.forEach(function(v){
+      var o = document.createElement('option'); o.value = v.name+'|'+v.lang;
+      var genre = FEMININES.test(v.name)?' — femme':MASCULINES.test(v.name)?' — homme':'';
+      o.textContent = v.name+' ('+v.lang+')'+genre; selVoix.appendChild(o);
+    });
+    if (actuelle) selVoix.value = actuelle;
+    if (!selVoix.value) selVoix.selectedIndex = 0;
+    note('voix disponibles', voix.map(function(v){return v.name+' ('+v.lang+')';}).join(', '));
+  }
+  if (window.speechSynthesis){ remplirVoix(); speechSynthesis.onvoiceschanged = remplirVoix; setTimeout(remplirVoix, 800); }
+  else { selVoix.innerHTML = '<option>(synthèse vocale absente)</option>'; }
+
   document.getElementById('b-voix').onclick = function(){
     if (!window.speechSynthesis){ etat('voix','ko','absente'); note('voix','ABSENTE'); return; }
-    var voix = speechSynthesis.getVoices().filter(function(v){return /^fr/i.test(v.lang);});
-    var choisie = voix.filter(function(v){return /fr-FR/i.test(v.lang) && /(Amélie|Amelie|Audrey|Aurélie|Thomas|Marie)/i.test(v.name);})[0] || voix[0];
-    var u = new SpeechSynthesisUtterance('Bonjour Matthieu. Je suis Shinra. Si vous m’entendez, ce téléphone me convient.');
-    u.lang='fr-FR'; if (choisie) u.voice=choisie; u.rate=1.0;
+    remplirVoix();
+    var voix = voixFr(), cle = selVoix.value;
+    var choisie = voix.filter(function(v){return v.name+'|'+v.lang===cle;})[0] || voix[0];
+    var nom = selNom.value || 'Shinra';
+    var u = new SpeechSynthesisUtterance('Bonjour Matthieu. Je suis '+nom+'. Si vous m’entendez, ce téléphone me convient.');
+    u.lang = choisie ? choisie.lang : 'fr-FR'; if (choisie) u.voice=choisie; u.rate=1.0;
     u.onend = function(){ etat('voix','ok','ok'); };
     u.onerror = function(e){ etat('voix','ko','erreur'); note('voix','ERREUR '+e.error); };
     etat('voix','attente','parle'); speechSynthesis.cancel(); speechSynthesis.speak(u);
-    var noms = voix.map(function(v){return v.name+' ('+v.lang+')';});
-    detail('voix', (choisie?'Voix utilisée : <b>'+choisie.name+'</b>. ':'') + voix.length+' voix françaises disponibles : '+(noms.join(', ')||'aucune'));
-    note('voix', (choisie?choisie.name:'?')+' — '+voix.length+' voix fr');
+    detail('voix', (choisie?'Voix : <b>'+choisie.name+'</b> ('+choisie.lang+'). ':'') + 'Nom prononcé : <b>'+nom+'</b>. ' + voix.length+' voix françaises sur ce téléphone.'
+      + (voix.some(function(v){return FEMININES.test(v.name);}) ? '' : '<br>Aucune voix de femme installée : Réglages → Accessibilité → Contenu énoncé → Voix → Français → télécharge « Audrey » ou « Aurélie », puis reviens ici.'));
+    note('voix choisie', (choisie?choisie.name+' ('+choisie.lang+')':'?'));
+    note('prononciation retenue', nom);
   };
-  if (window.speechSynthesis) speechSynthesis.onvoiceschanged = function(){};
 
   // 4. Claude (sans clé : on attend un 401 propre, pas un blocage CORS)
   document.getElementById('b-claude').onclick = function(){

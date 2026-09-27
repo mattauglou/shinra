@@ -67,6 +67,7 @@
   .rangee button{flex:1;min-width:120px}
   button.sobre{appearance:none;border:1px solid var(--accent);background:transparent;color:var(--accent);border-radius:12px;padding:12px 14px;font:inherit;font-weight:600;cursor:pointer}
   button.danger{border-color:var(--ko);color:var(--ko)}
+  button.sobre.actif{background:var(--accent-sombre);border-color:var(--ok);color:var(--ok)}
   button.plein{appearance:none;border:0;background:var(--accent);color:#04121a;border-radius:12px;padding:12px 14px;font:inherit;font-weight:700;cursor:pointer}
   .etat{font-size:12px;letter-spacing:.06em;text-transform:uppercase;padding:4px 9px;border-radius:999px;border:1px solid var(--bord);color:var(--sourd);white-space:nowrap}
   .etat.ok{color:var(--ok);border-color:var(--ok)} .etat.ko{color:var(--ko);border-color:var(--ko)}
@@ -125,6 +126,9 @@
       <input id="saisie" type="text" placeholder="Ou écris ta demande…" autocomplete="off" autocorrect="on" enterkeyhint="send">
       <button class="ico" id="b-envoyer" title="Envoyer">➤</button>
     </div>
+    <div class="rangee">
+      <button class="sobre" id="b-ml">Mains libres : arrêté</button>
+    </div>
     <button class="gros" id="b-micro"><span id="b-micro-texte">Appuie et parle</span></button>
   </footer>
 </div>
@@ -163,9 +167,11 @@
     <section>
       <h2>Comportement</h2>
       <label class="champ">Ton prénom <input id="r-prenom" type="text" placeholder="Matthieu"></label>
-      <label class="champ">Après une réponse, réécouter automatiquement pendant (secondes, 0 = non)
-        <input id="r-reecoute" type="number" min="0" max="60" step="1">
+      <label class="champ" style="flex-direction:row;align-items:center;gap:10px"><input id="r-ml-auto" type="checkbox" style="width:22px;height:22px"> Démarrer en mains libres à l'ouverture (dis « Shinra » pour l'appeler, sans appuyer)</label>
+      <label class="champ">Après « Shinra », continuer sans le nom pendant (minutes)
+        <input id="r-conversation" type="number" min="0.5" max="30" step="0.5">
       </label>
+      <p class="note">En mains libres, l'écran doit rester allumé : mets <b>Réglages iPhone → Luminosité et affichage → Verrouillage automatique → Jamais</b> pendant que tu l'utilises posé. Un petit « ding » d'iOS peut se faire entendre de temps en temps : c'est le micro qui se relance, c'est normal.</p>
       <label class="champ">Code d'accès à 4 chiffres (vide = pas de code)
         <input id="r-pin" type="tel" inputmode="numeric" maxlength="4" pattern="[0-9]*" placeholder="4071" autocomplete="off">
       </label>
@@ -254,7 +260,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   /* ------------------------------------------------------------------ Config */
   var DEFAUTS = {
     cle: '', modele: 'auto', prenom: 'Matthieu', pin: '4071', email: '',
-    voix: '', prononciation: 'Chinra', vitesse: 1.0, reecoute: 12,
+    voix: '', prononciation: 'Chinra', vitesse: 1.0, conversation_min: 3, mains_libres_auto: true,
     carnet: '', memoire: '',
     jetons_entree: 0, jetons_sortie: 0, cout_centimes: 0
   };
@@ -646,7 +652,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   var $ = function (id) { return document.getElementById(id); };
   var fil = $('fil'), bMicro = $('b-micro'), bMicroTexte = $('b-micro-texte'), point = $('etat-point'), compteur = $('compteur');
   var etatCourant = 'repos'; // repos | ecoute | reflechit | parle
-  var interimEl = null, minuteurReecoute = null;
+  var interimEl = null;
 
   function afficher(texte, cls, html) {
     var e = document.createElement('div'); e.className = 'msg ' + cls;
@@ -657,7 +663,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   function etat(nouvel, libelle) {
     etatCourant = nouvel; point.className = 'point ' + (nouvel === 'repos' ? '' : nouvel);
     bMicro.className = 'gros ' + (nouvel === 'repos' ? '' : nouvel);
-    bMicroTexte.textContent = libelle || { repos: 'Appuie et parle', ecoute: 'Je t\'écoute… (appuie pour arrêter)', reflechit: 'Je réfléchis…', parle: 'Appuie pour me couper' }[nouvel];
+    var libelles = { repos: 'Appuie et parle', ecoute: 'Je t\'écoute… (appuie pour arrêter)', reflechit: 'Je réfléchis…', parle: 'Appuie pour me couper' };
+    if (ML.actif) { libelles.repos = 'Mains libres — un instant…'; libelles.ecoute = enConversation() ? 'Je t\'écoute (conversation en cours)' : 'Dis « Shinra » pour m\'appeler'; }
+    bMicroTexte.textContent = libelle || libelles[nouvel];
+    if (nouvel === 'repos' && ML.actif) planifierBoucle();
   }
 
   /* ---- Voix */
@@ -699,34 +708,89 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   var Reco = window.SpeechRecognition || window.webkitSpeechRecognition, reco = null;
   var Oreille = {
     dispo: !!Reco,
-    ecouter: function (surTexte, dureeMaxSec, auto) {
+    // surTexte(t) est appelé quand une phrase est terminée (silence de ~1,3 s après la parole, ou fin imposée par iOS)
+    ecouter: function (surTexte, dureeMaxSec, auto, continu) {
       if (!Reco) { afficher('La reconnaissance vocale n\'est pas disponible ici. Écris ta demande en bas.', 'err'); return; }
       Oreille.arreter();
-      reco = new Reco(); reco.lang = 'fr-FR'; reco.interimResults = true; reco.continuous = false; reco.maxAlternatives = 1;
-      var final = '', gardeFou = setTimeout(function () { var r = reco; if (r) { try { r.stop(); } catch (e) { Oreille.arreter(); } } }, (dureeMaxSec || 20) * 1000);
-      reco.onresult = function (ev) {
+      var r = new Reco(); reco = r;
+      r.lang = 'fr-FR'; r.interimResults = true; r.continuous = !!continu; r.maxAlternatives = 1;
+      var final = '', dernierInterim = '', silence = null, termine = false;
+      function stopDoux() { try { r.stop(); } catch (e) { Oreille.arreter(); } }
+      var gardeFou = setTimeout(stopDoux, (dureeMaxSec || 20) * 1000);
+      r.onresult = function (ev) {
         var texte = '';
-        for (var i = ev.resultIndex; i < ev.results.length; i++) { texte += ev.results[i][0].transcript; if (ev.results[i].isFinal) final += ev.results[i][0].transcript; }
+        for (var i = 0; i < ev.results.length; i++) { texte += ev.results[i][0].transcript; if (ev.results[i].isFinal) final = texte; }
+        dernierInterim = texte;
         if (!interimEl) { interimEl = document.createElement('div'); interimEl.className = 'interim'; fil.appendChild(interimEl); }
-        interimEl.textContent = final || texte; fil.scrollTop = fil.scrollHeight;
+        interimEl.textContent = texte; fil.scrollTop = fil.scrollHeight;
+        clearTimeout(silence); silence = setTimeout(stopDoux, 1300); // fin de phrase = silence après la parole
       };
-      reco.onerror = function (ev) {
-        clearTimeout(gardeFou);
-        if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') { if (!auto) afficher('Micro refusé. Autorise le micro pour Shinra dans Réglages → Safari, ou relance depuis l\'icône.', 'err'); else reecouteAutorisee = false; }
-        else if (ev.error !== 'aborted' && ev.error !== 'no-speech') afficher('Reconnaissance : ' + ev.error, 'err');
-        Oreille.nettoyer(); if (etatCourant === 'ecoute') etat('repos');
+      r.onerror = function (ev) {
+        clearTimeout(gardeFou); clearTimeout(silence);
+        if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
+          if (auto) { ML.actif = false; majBoutonML(); afficher('iOS a refusé le micro sans appui. Appuie sur « Mains libres » pour relancer l\'écoute.', 'err'); }
+          else afficher('Micro refusé. Autorise le micro pour Shinra dans Réglages → Safari, ou relance depuis l\'icône.', 'err');
+        }
+        else if (ev.error !== 'aborted' && ev.error !== 'no-speech' && ev.error !== 'network') afficher('Reconnaissance : ' + ev.error, 'err');
+        else if (ev.error === 'network' && !auto) afficher('Pas de réseau pour la reconnaissance vocale : vérifie le wifi.', 'err');
       };
-      reco.onend = function () {
-        clearTimeout(gardeFou);
-        var t = (final || (interimEl && interimEl.textContent) || '').trim();
+      r.onend = function () {
+        clearTimeout(gardeFou); clearTimeout(silence);
+        if (termine) return; termine = true; if (reco === r) reco = null;
+        var t = (final || dernierInterim || '').trim();
         Oreille.nettoyer();
         if (t) surTexte(t); else if (etatCourant === 'ecoute') etat('repos');
       };
-      try { reco.start(); etat('ecoute'); } catch (e) { afficher('Impossible de démarrer le micro : ' + e.message, 'err'); etat('repos'); }
+      try { r.start(); etat('ecoute'); } catch (e) { reco = null; if (!auto) afficher('Impossible de démarrer le micro : ' + e.message, 'err'); etat('repos'); }
     },
     nettoyer: function () { if (interimEl && interimEl.parentNode) interimEl.parentNode.removeChild(interimEl); interimEl = null; },
-    arreter: function () { if (reco) { try { reco.onend = null; reco.onerror = null; reco.abort(); } catch (e) {} reco = null; } Oreille.nettoyer(); }
+    arreter: function () { if (reco) { var r = reco; reco = null; try { r.onend = null; r.onerror = null; r.onresult = null; r.abort(); } catch (e) {} } Oreille.nettoyer(); }
   };
+
+  /* ---- Mains libres : écoute permanente, réveil par le nom, fenêtre de conversation */
+  var ML = { actif: false, fenetre: 0, minuteur: null, verrou: null };
+  var REVEIL = /(?:^|\s)(?:bonjour|salut|hey|ok|dis|dites|allo|allô|eh|hé)?\s*(shinra|chinra|chira|shira|china|sindra|shin ra|chine ra|chinera|shinera|shinrah|chinrah|chin ra|shindra)(?=\s|,|\.|!|\?|$)/i;
+  S.REVEIL = REVEIL;
+  function enConversation() { return Date.now() < ML.fenetre; }
+  function prolonger() { ML.fenetre = Date.now() + (parseFloat(C.conversation_min) || 3) * 60000; }
+  function mlSurPhrase(t) {
+    var m = REVEIL.exec(normaliser(t));
+    if (m) {
+      var apres = t.slice(m.index + m[0].length).replace(/^[\s,.!?]+/, '').trim();
+      prolonger();
+      if (apres && apres.split(/\s+/).length >= 1 && !/^(bonjour|salut|hey)$/i.test(apres)) traiter(apres);
+      else repondre('Oui ' + C.prenom + ' ?', false);
+      return;
+    }
+    if (enConversation()) { traiter(t); return; }
+    afficher('(ignoré, sans mon nom : « ' + t + ' »)', 'sys'); etat('repos');
+  }
+  function planifierBoucle() {
+    clearTimeout(ML.minuteur);
+    if (!ML.actif) return;
+    ML.minuteur = setTimeout(function () {
+      if (ML.actif && etatCourant === 'repos' && !document.hidden) Oreille.ecouter(mlSurPhrase, 55, true, true);
+    }, 400);
+  }
+  function verrouEcran() {
+    if (!navigator.wakeLock) return;
+    navigator.wakeLock.request('screen').then(function (v) { ML.verrou = v; }).catch(function () {});
+  }
+  function mlDemarrer() {
+    ML.actif = true; prolonger(); verrouEcran(); majBoutonML();
+    if (etatCourant === 'repos') planifierBoucle();
+  }
+  function mlArreter() {
+    ML.actif = false; clearTimeout(ML.minuteur); majBoutonML();
+    if (ML.verrou) { try { ML.verrou.release(); } catch (e) {} ML.verrou = null; }
+    if (etatCourant === 'ecoute') { Oreille.arreter(); etat('repos'); }
+  }
+  function majBoutonML() {
+    var b = $('b-ml'); if (!b) return;
+    b.textContent = ML.actif ? 'Mains libres : activé' : 'Mains libres : arrêté';
+    b.className = 'sobre' + (ML.actif ? ' actif' : '');
+    if (etatCourant === 'repos' || etatCourant === 'ecoute') etat(etatCourant);
+  }
 
   /* ---- Ouvrir / partager */
   function ouvrirUrl(url, libelle) {
@@ -787,26 +851,20 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   }
 
   /* ---- Traitement d'une demande */
-  var reecouteAutorisee = false;
   function repondre(texte, puisReecouter) {
     afficher(texte, 'elle');
-    Voix.parler(texte, function () { etat('repos'); if (puisReecouter) planifierReecoute(); });
-  }
-  function planifierReecoute() {
-    clearTimeout(minuteurReecoute);
-    var sec = parseInt(C.reecoute, 10) || 0;
-    if (!sec || !reecouteAutorisee) return;
-    minuteurReecoute = setTimeout(function () { if (etatCourant === 'repos') Oreille.ecouter(traiter, sec, true); }, 350);
+    if (ML.actif && puisReecouter !== false) prolonger();
+    Voix.parler(texte, function () { etat('repos'); });
   }
   function traiter(texte) {
-    clearTimeout(minuteurReecoute);
+    clearTimeout(ML.minuteur);
     texte = texte.trim(); if (!texte) return;
     afficher(texte, 'moi');
     var r = regles(texte);
     if (r) {
       switch (r.action) {
         case 'stop': Voix.couper(); etat('repos'); return;
-        case 'repos': reecouteAutorisee = false; repondre('Je me mets en veille. Appuie sur le bouton quand tu as besoin de moi.', false); return;
+        case 'repos': ML.fenetre = 0; repondre(ML.actif ? 'Je me mets en veille. Dis mon nom quand tu as besoin de moi.' : 'Je me mets en veille. Appuie sur le bouton quand tu as besoin de moi.', false); return;
         case 'dire': repondre(r.texte, true); return;
         case 'reglages': ouvrirEcran('reglages'); etat('repos'); return;
         case 'documents': ouvrirEcran('docs'); etat('repos'); return;
@@ -840,13 +898,18 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     if (etatCourant === 'parle') { Voix.couper(); etat('repos'); return; }
     if (etatCourant === 'ecoute') { Oreille.arreter(); etat('repos'); return; }
     if (etatCourant === 'reflechit') return;
-    reecouteAutorisee = true; clearTimeout(minuteurReecoute);
+    clearTimeout(ML.minuteur);
+    if (ML.actif) prolonger();
     Oreille.ecouter(traiter);
   });
+  $('b-ml').addEventListener('click', function () { Voix.debloquer(); if (ML.actif) mlArreter(); else mlDemarrer(); });
   $('b-envoyer').addEventListener('click', function () { var s = $('saisie'); var t = s.value.trim(); if (!t) return; s.value = ''; Voix.debloquer(); traiter(t); });
   $('saisie').addEventListener('keydown', function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); $('b-envoyer').click(); } });
   $('puces').addEventListener('click', function (ev) { var b = ev.target.closest('button'); if (!b) return; Voix.debloquer(); traiter(b.getAttribute('data-dire')); });
-  document.addEventListener('visibilitychange', function () { if (document.hidden) { clearTimeout(minuteurReecoute); Oreille.arreter(); if (etatCourant === 'ecoute') etat('repos'); } });
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) { clearTimeout(ML.minuteur); Oreille.arreter(); if (etatCourant === 'ecoute') { etatCourant = 'repos'; } }
+    else if (ML.actif) { verrouEcran(); if (etatCourant === 'repos') planifierBoucle(); }
+  });
 
   /* ---- Écrans */
   function ouvrirEcran(nom) {
@@ -871,7 +934,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   if (window.speechSynthesis) { speechSynthesis.onvoiceschanged = remplirVoix; setTimeout(remplirVoix, 500); }
   function remplirReglages() {
     $('r-cle').value = C.cle; $('r-prenom').value = C.prenom; $('r-pin').value = C.pin; $('r-email').value = C.email;
-    $('r-prononciation').value = C.prononciation; $('r-vitesse').value = C.vitesse; $('r-reecoute').value = C.reecoute;
+    $('r-prononciation').value = C.prononciation; $('r-vitesse').value = C.vitesse; $('r-conversation').value = C.conversation_min; $('r-ml-auto').checked = !!C.mains_libres_auto;
     $('r-carnet').value = C.carnet; $('r-memoire').value = C.memoire;
     $('r-compteur').textContent = 'Entrée : ' + C.jetons_entree.toLocaleString('fr-FR') + ' jetons · Sortie : ' + C.jetons_sortie.toLocaleString('fr-FR') + ' jetons · Coût estimé : ' + (C.cout_centimes / 100).toFixed(3).replace('.', ',') + ' € (approximatif, selon le tarif public du modèle)';
     var sel = $('r-modele'); if (sel.options.length <= 1 && C.modele !== 'auto') { var o = document.createElement('option'); o.value = C.modele; o.textContent = C.modele; sel.appendChild(o); }
@@ -881,7 +944,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   function lireReglages() {
     C.cle = $('r-cle').value.trim(); C.prenom = $('r-prenom').value.trim() || 'Matthieu'; C.pin = $('r-pin').value.replace(/\D/g, '').slice(0, 4);
     C.email = $('r-email').value.trim(); C.prononciation = $('r-prononciation').value.trim() || 'Chinra'; C.vitesse = parseFloat($('r-vitesse').value) || 1;
-    C.reecoute = Math.max(0, parseInt($('r-reecoute').value, 10) || 0); C.carnet = $('r-carnet').value; C.memoire = $('r-memoire').value;
+    C.conversation_min = Math.max(0.5, parseFloat($('r-conversation').value) || 3); C.mains_libres_auto = $('r-ml-auto').checked; C.carnet = $('r-carnet').value; C.memoire = $('r-memoire').value;
     C.voix = $('r-voix').value; C.modele = $('r-modele').value || 'auto'; modeleResolu = null;
     sauverConfig();
   }
@@ -965,11 +1028,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
   /* ---- Démarrage */
   function demarrer() {
-    ouvrirEcran('principal'); majCompteur();
+    ouvrirEcran('principal'); majCompteur(); majBoutonML();
+    if (C.mains_libres_auto && C.cle && Oreille.dispo) setTimeout(mlDemarrer, 300);
     if (!fil.children.length) {
       historique.slice(-10).forEach(function (m) { if (typeof m.content === 'string') afficher(m.content, m.role === 'user' ? 'moi' : 'elle'); });
       if (!C.cle) { afficher('Bienvenue ' + C.prenom + '. Première étape : ouvre les réglages (⚙︎ en haut à droite) et colle ta clé Claude. Ensuite, appuie sur le bouton et parle.', 'sys'); }
-      else if (!historique.length) afficher('Appuie sur le bouton et parle. Dis « stop » ou appuie à nouveau pour me couper, « repos » pour arrêter l\'écoute automatique.', 'sys');
+      else if (!historique.length) afficher('Dis « Shinra » suivi de ta demande, ou appuie sur le bouton et parle. « Stop » me coupe, « repos » me remet en attente du nom.', 'sys');
     }
   }
   var dejaOuvert = false; try { dejaOuvert = sessionStorage.getItem('shinra.ouvert') === '1'; } catch (e) {}

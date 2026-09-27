@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Shinra test">
+<meta name="theme-color" content="#070b12">
+<title>Shinra — test iPhone</title>
+<style>
+  :root{
+    --fond:#070b12; --carte:#0f1622; --bord:#1e2a3c; --texte:#e6edf7; --sourd:#8a9bb5;
+    --accent:#3dd6f5; --ok:#37d67a; --ko:#ff5c6a; --attente:#ffc857;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--fond);color:var(--texte);
+    font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+  main{max-width:520px;margin:0 auto;padding:20px 16px 40px;display:flex;flex-direction:column;gap:14px}
+  h1{font-size:22px;margin:6px 0 0;letter-spacing:.02em}
+  h1 small{display:block;font-size:13px;color:var(--sourd);font-weight:400;letter-spacing:.06em;text-transform:uppercase;margin-top:4px}
+  p.intro{color:var(--sourd);margin:0 0 6px}
+  section{background:var(--carte);border:1px solid var(--bord);border-radius:14px;padding:14px 14px 12px;display:flex;flex-direction:column;gap:10px}
+  .titre{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .titre h2{font-size:15px;margin:0;font-weight:600}
+  .etat{font-size:12px;letter-spacing:.06em;text-transform:uppercase;padding:4px 9px;border-radius:999px;border:1px solid var(--bord);color:var(--sourd);white-space:nowrap}
+  .etat.ok{color:var(--ok);border-color:var(--ok)} .etat.ko{color:var(--ko);border-color:var(--ko)} .etat.attente{color:var(--attente);border-color:var(--attente)}
+  button{appearance:none;border:0;border-radius:12px;padding:14px 16px;font:inherit;font-weight:600;background:var(--accent);color:#04121a;cursor:pointer;width:100%}
+  button.sobre{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+  button:active{transform:scale(.99)}
+  button:disabled{opacity:.45}
+  .detail{font-size:14px;color:var(--sourd);min-height:1.4em;white-space:pre-wrap;word-break:break-word}
+  .detail b{color:var(--texte)}
+  .rapport{font-family:ui-monospace,Menlo,monospace;font-size:12px;background:#0a1019;border:1px solid var(--bord);border-radius:10px;padding:10px;white-space:pre-wrap;color:var(--sourd)}
+  .rangee{display:flex;gap:10px}
+  .rangee button{flex:1}
+  .pulse{width:12px;height:12px;border-radius:50%;background:var(--ko);display:inline-block;margin-right:8px;vertical-align:-1px}
+  .pulse.on{background:var(--ok);box-shadow:0 0 0 0 rgba(55,214,122,.6);animation:bat 1.2s infinite}
+  @keyframes bat{to{box-shadow:0 0 0 12px rgba(55,214,122,0)}}
+  @media (prefers-reduced-motion:reduce){.pulse.on{animation:none}}
+</style>
+</head>
+<body>
+<main>
+  <h1>Shinra <small>test de faisabilité iPhone</small></h1>
+  <p class="intro">Quatre choses à vérifier sur ce téléphone. Appuie sur chaque bouton, puis « Copier le rapport » en bas et colle-le-moi.</p>
+
+  <section id="s-mode">
+    <div class="titre"><h2>0 · Mode d'ouverture</h2><span class="etat" id="e-mode">…</span></div>
+    <div class="detail" id="d-mode"></div>
+  </section>
+
+  <section id="s-micro">
+    <div class="titre"><h2>1 · Micro</h2><span class="etat" id="e-micro">à tester</span></div>
+    <button id="b-micro">Tester le micro</button>
+    <div class="detail" id="d-micro">Safari va demander l'autorisation. Réponds « Autoriser ».</div>
+  </section>
+
+  <section id="s-reco">
+    <div class="titre"><h2>2 · Reconnaissance (Apple, français)</h2><span class="etat" id="e-reco">à tester</span></div>
+    <button id="b-reco"><span class="pulse" id="p-reco"></span>Parler maintenant</button>
+    <div class="detail" id="d-reco">Dis une phrase, par exemple : « Shinra, ouvre Amazon et cherche une imprimante ».</div>
+  </section>
+
+  <section id="s-voix">
+    <div class="titre"><h2>3 · Voix</h2><span class="etat" id="e-voix">à tester</span></div>
+    <button id="b-voix">Faire parler Shinra</button>
+    <div class="detail" id="d-voix"></div>
+  </section>
+
+  <section id="s-claude">
+    <div class="titre"><h2>4 · Liaison directe avec Claude</h2><span class="etat" id="e-claude">à tester</span></div>
+    <button id="b-claude">Tester la liaison</button>
+    <div class="detail" id="d-claude">Sans clé : on vérifie seulement que le téléphone peut joindre Claude d'ici. La réponse attendue est un refus poli (« clé manquante »), pas un blocage.</div>
+  </section>
+
+  <section id="s-ms">
+    <div class="titre"><h2>5 · Liaison avec Microsoft (Hotmail)</h2><span class="etat" id="e-ms">à tester</span></div>
+    <button id="b-ms">Tester la liaison</button>
+    <div class="detail" id="d-ms"></div>
+  </section>
+
+  <section>
+    <div class="titre"><h2>Rapport</h2></div>
+    <div class="rapport" id="rapport">(appuie sur les boutons ci-dessus)</div>
+    <div class="rangee">
+      <button class="sobre" id="b-copier">Copier le rapport</button>
+    </div>
+  </section>
+</main>
+
+<script>
+(function(){
+  var R = {};
+  function etat(id, cls, txt){ var e=document.getElementById('e-'+id); e.className='etat '+cls; e.textContent=txt; }
+  function detail(id, html){ document.getElementById('d-'+id).innerHTML=html; }
+  function note(cle, val){ R[cle]=val; rendre(); }
+  function rendre(){
+    var ua = navigator.userAgent.replace(/\s+/g,' ');
+    var lignes = ['Shinra — rapport de test', 'appareil : '+ua, ''];
+    for (var k in R) lignes.push(k+' : '+R[k]);
+    document.getElementById('rapport').textContent = lignes.join('\n');
+  }
+
+  // 0. mode
+  var standalone = (window.navigator.standalone === true) || window.matchMedia('(display-mode: standalone)').matches;
+  etat('mode', standalone?'ok':'attente', standalone?'écran d’accueil':'dans Safari');
+  detail('mode', standalone ? 'Ouvert depuis l’icône de l’écran d’accueil : c’est le mode final.'
+                            : 'Ouvert dans Safari. Refais le test une seconde fois après « Partager → Sur l’écran d’accueil », c’est le mode qui compte.');
+  note('mode', standalone?'icône (standalone)':'Safari');
+  note('iOS', (navigator.userAgent.match(/OS (\d+)_(\d+)/)||[]).slice(1).join('.') || '?');
+
+  // 1. micro
+  document.getElementById('b-micro').onclick = function(){
+    etat('micro','attente','en cours'); detail('micro','Demande d’autorisation…');
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      etat('micro','ko','absent'); detail('micro','Ce navigateur n’expose pas le micro aux pages web.'); note('micro','ABSENT'); return;
+    }
+    navigator.mediaDevices.getUserMedia({audio:true}).then(function(flux){
+      var ctx = new (window.AudioContext||window.webkitAudioContext)();
+      var src = ctx.createMediaStreamSource(flux), ana = ctx.createAnalyser(); ana.fftSize=512; src.connect(ana);
+      var data = new Uint8Array(ana.frequencyBinCount), max=0, t0=Date.now();
+      detail('micro','Micro ouvert. <b>Parle 3 secondes</b>, je mesure le niveau…');
+      (function boucle(){
+        ana.getByteTimeDomainData(data);
+        var s=0; for (var i=0;i<data.length;i++){ var v=(data[i]-128)/128; s+=v*v; }
+        var rms=Math.sqrt(s/data.length); if (rms>max) max=rms;
+        if (Date.now()-t0<3000) requestAnimationFrame(boucle);
+        else {
+          flux.getTracks().forEach(function(t){t.stop();});
+          var ok = max>0.01;
+          etat('micro', ok?'ok':'ko', ok?'ok':'muet');
+          detail('micro', ok ? 'Le micro fonctionne. Niveau maxi mesuré : <b>'+max.toFixed(3)+'</b>.'
+                             : 'Autorisé, mais aucun son n’arrive (niveau '+max.toFixed(3)+'). Vérifie que rien ne coupe le micro.');
+          note('micro', ok ? 'OK (niveau '+max.toFixed(3)+')' : 'MUET (niveau '+max.toFixed(3)+')');
+        }
+      })();
+    }).catch(function(e){
+      etat('micro','ko','refusé'); detail('micro','Refusé : '+e.name+'. '+(e.name==='NotAllowedError'?'Réglages iPhone → Safari → Microphone → Autoriser, puis recharge.':e.message));
+      note('micro','REFUSÉ ('+e.name+')');
+    });
+  };
+
+  // 2. reconnaissance
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR){ etat('reco','ko','absente'); detail('reco','Ce navigateur n’a pas la reconnaissance vocale intégrée.'); note('reconnaissance','ABSENTE'); }
+  document.getElementById('b-reco').onclick = function(){
+    if (!SR) return;
+    var rec = new SR(); rec.lang='fr-FR'; rec.interimResults=true; rec.maxAlternatives=1; rec.continuous=false;
+    var p = document.getElementById('p-reco'); p.classList.add('on');
+    etat('reco','attente','j’écoute'); detail('reco','Parle…'); var final='', t0=Date.now();
+    rec.onresult = function(ev){
+      var txt=''; for (var i=ev.resultIndex;i<ev.results.length;i++){ txt+=ev.results[i][0].transcript; if (ev.results[i].isFinal) final=txt; }
+      detail('reco','<b>'+(final||txt)+'</b>');
+    };
+    rec.onerror = function(ev){
+      p.classList.remove('on'); etat('reco','ko',ev.error); detail('reco','Erreur : '+ev.error+(ev.error==='not-allowed'?' — autorise le micro pour Safari dans les Réglages.':''));
+      note('reconnaissance','ERREUR '+ev.error);
+    };
+    rec.onend = function(){
+      p.classList.remove('on');
+      if (final){ etat('reco','ok','ok'); detail('reco','Compris en '+((Date.now()-t0)/1000).toFixed(1)+' s : <b>'+final+'</b>'); note('reconnaissance','OK — « '+final+' » ('+((Date.now()-t0)/1000).toFixed(1)+' s)'); }
+      else if (!R.reconnaissance || R.reconnaissance.indexOf('ERREUR')<0){ etat('reco','ko','rien'); detail('reco','Rien entendu. Réessaie en parlant tout de suite après avoir appuyé.'); note('reconnaissance','RIEN ENTENDU'); }
+    };
+    try { rec.start(); } catch(e){ p.classList.remove('on'); etat('reco','ko','échec'); detail('reco',e.message); note('reconnaissance','ÉCHEC '+e.message); }
+  };
+
+  // 3. voix
+  document.getElementById('b-voix').onclick = function(){
+    if (!window.speechSynthesis){ etat('voix','ko','absente'); note('voix','ABSENTE'); return; }
+    var voix = speechSynthesis.getVoices().filter(function(v){return /^fr/i.test(v.lang);});
+    var choisie = voix.filter(function(v){return /fr-FR/i.test(v.lang) && /(Amélie|Amelie|Audrey|Aurélie|Thomas|Marie)/i.test(v.name);})[0] || voix[0];
+    var u = new SpeechSynthesisUtterance('Bonjour Matthieu. Je suis Shinra. Si vous m’entendez, ce téléphone me convient.');
+    u.lang='fr-FR'; if (choisie) u.voice=choisie; u.rate=1.0;
+    u.onend = function(){ etat('voix','ok','ok'); };
+    u.onerror = function(e){ etat('voix','ko','erreur'); note('voix','ERREUR '+e.error); };
+    etat('voix','attente','parle'); speechSynthesis.cancel(); speechSynthesis.speak(u);
+    var noms = voix.map(function(v){return v.name+' ('+v.lang+')';});
+    detail('voix', (choisie?'Voix utilisée : <b>'+choisie.name+'</b>. ':'') + voix.length+' voix françaises disponibles : '+(noms.join(', ')||'aucune'));
+    note('voix', (choisie?choisie.name:'?')+' — '+voix.length+' voix fr');
+  };
+  if (window.speechSynthesis) speechSynthesis.onvoiceschanged = function(){};
+
+  // 4. Claude (sans clé : on attend un 401 propre, pas un blocage CORS)
+  document.getElementById('b-claude').onclick = function(){
+    etat('claude','attente','en cours');
+    fetch('https://api.anthropic.com/v1/messages', {method:'POST',
+      headers:{'content-type':'application/json','anthropic-version':'2023-06-01','x-api-key':'sk-ant-test','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:'claude-haiku-4-5',max_tokens:5,messages:[{role:'user',content:'ping'}]})})
+    .then(function(r){ return r.text().then(function(t){ return {s:r.status,t:t}; }); })
+    .then(function(x){
+      var ok = x.s===401 || x.s===400 || x.s===403;
+      etat('claude', ok?'ok':'ko', ok?'joignable':'HTTP '+x.s);
+      detail('claude', ok ? 'Claude répond depuis ce téléphone (refus attendu sans clé, code '+x.s+'). La liaison directe fonctionne.' : 'Réponse inattendue '+x.s+' : '+x.t.slice(0,120));
+      note('claude', ok?'JOIGNABLE (HTTP '+x.s+')':'INATTENDU HTTP '+x.s);
+    }).catch(function(e){ etat('claude','ko','bloquée'); detail('claude','Bloquée : '+e.message+'. Le navigateur ou l’hébergement empêche la liaison.'); note('claude','BLOQUÉE '+e.message); });
+  };
+
+  // 5. Microsoft (simple joignabilite de la page de connexion)
+  document.getElementById('b-ms').onclick = function(){
+    etat('ms','attente','en cours');
+    fetch('https://login.microsoftonline.com/common/v2.0/.well-known/openid-configuration')
+    .then(function(r){ return r.json(); })
+    .then(function(j){ var ok=!!j.authorization_endpoint; etat('ms', ok?'ok':'ko', ok?'joignable':'?'); detail('ms', ok?'Le serveur de connexion Microsoft répond depuis ce téléphone.':'Réponse inattendue.'); note('microsoft', ok?'JOIGNABLE':'INATTENDU'); })
+    .catch(function(e){ etat('ms','ko','bloquée'); detail('ms','Bloquée : '+e.message); note('microsoft','BLOQUÉE '+e.message); });
+  };
+
+  // copier
+  document.getElementById('b-copier').onclick = function(){
+    var t=document.getElementById('rapport').textContent, b=this;
+    function fini(){ b.textContent='Copié — colle-le dans la conversation'; setTimeout(function(){b.textContent='Copier le rapport';},2500); }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(fini, function(){ selectionner(); });
+    else selectionner();
+    function selectionner(){ var r=document.createRange(); r.selectNodeContents(document.getElementById('rapport')); var s=getSelection(); s.removeAllRanges(); s.addRange(r); b.textContent='Sélectionné — Copier'; }
+  };
+  rendre();
+})();
+</script>
+</body>
+</html>
